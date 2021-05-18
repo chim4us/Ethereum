@@ -1,8 +1,6 @@
 const Web3 = require('web3');
 
 class TransactionChecker{
-  //const web3;
-  //const account;
 
   constructor(projectId,account){
     this.web3 = new Web3(new Web3.providers.HttpProvider('https://rinkeby.infura.io/v3/' + projectId));
