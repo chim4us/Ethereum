@@ -18,17 +18,17 @@ contract casino is ownable, Destroyable{
     }
     
     enum PlayerState{stage0,stage1, stage2, stage3, stage4, stage5}
-    PlayerState public state;
+    PlayerState private state;
     PlayerState constant defaultState = PlayerState.stage1;
     
     mapping(address => uint) private Ballances;
     mapping(address => Member) private Creator;
-    mapping(address => adrNetwork) public NetTree;
+    mapping(address => adrNetwork) private NetTree;
     
     address[] private Creators;
     
     uint private MembCount = 1;
-    uint public TotalSupply;
+    uint private TotalSupply;
     //uint private FeeAmt = 20 finney;
     
     //modifiers
@@ -39,6 +39,7 @@ contract casino is ownable, Destroyable{
     
     modifier checkRef (address _ref){
         require(!NetTree[_ref].refCompleted);
+        require(Creator[_ref].id > 0);
         _;
     }
     
@@ -72,9 +73,11 @@ contract casino is ownable, Destroyable{
             newMember.ref,
             newMember.stage))
         );
+        
+        MembCount += 1;
     }
     
-    function getAddrDetails(address _adr) public view onlyOwner returns 
+    function getAddrDetails(address _adr) public view returns 
     (uint Bal, uint id,address referedBy, PlayerState stage, address referedFirst, address referedSecond ){
         uint _bal = Ballances[_adr];
         return (_bal,
@@ -130,69 +133,75 @@ contract casino is ownable, Destroyable{
         MembCount += 1;
     }
     
-    function Upgrade() public payable cost(40 finney){
+    function Upgrade() public payable cost(50 finney) returns(address){
         PlayerState refStage = Creator[msg.sender].stage;
         address _ref = Creator[msg.sender].ref;
         uint  count;
         uint amt;
         uint dif;
         if(refStage == PlayerState.stage1){
-            require(msg.value >= 40 finney,"Value must be greater than 0.04 ether");
+            require(msg.value >= 50 finney,"Value must be greater than 0.04 ether");
             count = 1;
-            amt = 40 finney;
+            amt = 50 finney;
             dif = msg.value - amt;
             Creator[msg.sender].stage = PlayerState.stage2;
         }else if(refStage == PlayerState.stage2){
-            require(msg.value >= 400 finney,"Value must be greater than 0.40 ether");
+            require(msg.value >= 100 finney,"Value must be greater than 0.10 ether");
             count = 2;
-            amt = 400 finney;
+            amt = 100 finney;
             dif = msg.value - amt;
             Creator[msg.sender].stage = PlayerState.stage3;
         }else if(refStage == PlayerState.stage3){
-            require(msg.value >= 500 finney,"Value must be greater than 0.50 ether");
+            require(msg.value >= 400 finney,"Value must be greater than 0.40 ether");
             count = 3;
-            amt = 500 finney;
+            amt = 400 finney;
             dif = msg.value - amt;
             Creator[msg.sender].stage = PlayerState.stage4;
         }else if(refStage == PlayerState.stage4){
-            require(msg.value >= 600 finney,"Value must be greater than 0.60 ether");
+            require(msg.value >= 1000 finney,"Value must be greater than 1 ether");
             count = 4;
-            amt = 600 finney;
+            amt = 1000 finney;
             dif = msg.value - amt;
             Creator[msg.sender].stage = PlayerState.stage5;
         }else if(refStage == PlayerState.stage5){
-            require(msg.value >= 700 finney,"Value must be greater than 0.70 ether");
+            require(msg.value >= 1000 finney,"Value must be greater than 1 ether");
             count = 5;
-            amt = 700 finney;
-            dif = msg.value - amt;
+            amt = msg.value;
+            dif = 0;
+            Creator[msg.sender].stage = PlayerState.stage5;
         }
-        uint i = 1;
-        while(i < count) {
-            _ref = Creator[_ref].ref;
-            if(_ref == address(0)){
-                _ref = owner;
+        
+        if(refStage != PlayerState.stage5){
+            uint i = 1;
+            while(i < count) {
+                _ref = Creator[_ref].ref;
+                if(_ref == address(0)){
+                    _ref = owner;
+                }
+                i++;
             }
+        }else{
+            _ref = owner;
         }
         Ballances[_ref] += amt;
         Ballances[owner] += dif;
         TotalSupply += msg.value;
         assert(address(this).balance >= TotalSupply);
         emit UpgradeEvt(msg.sender,msg.value,amt,_ref);
+        return (_ref);
     }
     
     function InsertPerson(Member memory _newMember, adrNetwork memory _newAdrNetwork) private{
         address NewCreator = msg.sender;
         Creator[NewCreator] = _newMember;
         NetTree[NewCreator] = _newAdrNetwork;
-        
-        
     }
     
     function AddBal(address _ref) private{
         PlayerState refStage = Creator[_ref].stage;
         if(refStage == PlayerState.stage1){
-            uint diff = msg.value - 20 finney;
-            Ballances[_ref] += 20 finney;
+            uint diff = msg.value - 30 finney;
+            Ballances[_ref] += 30 finney;
             Ballances[owner] += diff;
         }else{
             Ballances[owner] += msg.value;
@@ -215,6 +224,15 @@ contract casino is ownable, Destroyable{
         
         emit WithdrawedEvt(msg.sender,amoutToWith,msg.sender);
         return amoutToWith;
+    }
+    
+    function withdrawEx() public payable onlyOwner whenNotPaused returns(uint){
+        uint conBal = address(this).balance;
+        uint diff = conBal - TotalSupply;
+        msg.sender.transfer(diff);
+        assert(address(this).balance >= TotalSupply);
+        emit WithdrawedEvt(msg.sender,diff,msg.sender);
+        return diff;
     }
     
     function emergencyWithdraw(address payable _adrToWith) public payable onlyOwner whenPaused returns(uint){
