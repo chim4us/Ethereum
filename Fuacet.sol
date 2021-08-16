@@ -29,6 +29,7 @@ interface Tkn{
 contract NFuacet is AccessControl{
     
     mapping(address => uint256) private _balances;
+    mapping(address => bool) internal PauseAddr;
     address contractAdr;
     bool private _paused;
     uint256 private minBetAmt;
@@ -49,8 +50,13 @@ contract NFuacet is AccessControl{
         _;
     }
     
-    modifier checkBetAmt (uint256 _amt){
+    modifier checkBetAmt(uint256 _amt){
         require(_amt >= minBetAmt, "Amount is less than minimum amount ");
+        _;
+    }
+    
+    modifier checkfreezeAdr(address _Adr){
+        require(PauseAddr[_Adr] == false, "Address frozen on this contract.");
         _;
     }
     
@@ -61,7 +67,14 @@ contract NFuacet is AccessControl{
         _;
     }
     
+    modifier CheckContractBal (address _Adr){
+        require(_balances[_Adr] > 0,"Address dont have any balance");
+        _;
+    }
+    
     event WithdrawedEvt(address account, uint amount,address perFormby);
+    event BetLowHisEvt(address account, uint256 amount,uint256 Result);
+    event BetHighHisEvt(address account, uint256 amount,uint256 Result);
     
     constructor(
         address _contractAdr,
@@ -87,7 +100,7 @@ contract NFuacet is AccessControl{
     
     function getRandom() private view returns (uint256) {
         uint source = (block.difficulty + block.timestamp) ;
-        uint256 renum = uint256( keccak256(abi.encodePacked(source)) ) % 10000;
+        uint256 renum = uint256( keccak256(abi.encodePacked(source)) )  % 10000;
         return renum;
     }
     
@@ -96,11 +109,15 @@ contract NFuacet is AccessControl{
         minBetAmt = _minBetAMt;
     }
     
-    function getAddressBal(address _Adr) public view returns(uint256 bal){
-        return(_balances[_Adr]);
+    function getAddressDet(address _Adr) public view returns(uint256 bal,bool Freeze){
+        return(_balances[_Adr],PauseAddr[_Adr]);
     }
     
-    function BetHigh(uint256 _amt) public cost(_amt,msg.sender) checkBetAmt(_amt) returns(bool result){
+    function freezeAndUnfreezeAddress(bool _Pval,address _Adr) public onlyOwner{
+        PauseAddr[_Adr] = _Pval;
+    }
+    
+    function BetHigh(uint256 _amt) public cost(_amt,msg.sender) checkBetAmt(_amt) returns(bool result,uint256 Num){
         Tkn Token = Tkn(contractAdr);
         
         uint256 ramdomNum = getRandom();
@@ -109,16 +126,19 @@ contract NFuacet is AccessControl{
         TotalSupply += _amt;
         
         assert(Token.balanceOf(address(this)) >= TotalSupply);
+        
+        emit BetHighHisEvt(msg.sender,_amt,ramdomNum);
+        
         if(ramdomNum > 5250){
             _balances[msg.sender] = (_amt * 2);
             TotalSupply += _amt;
-            return (true);
+            return (true,ramdomNum);
         }else{
-            return(false);
+            return(false,ramdomNum);
         }
     }
     
-    function BetLow(uint256 _amt) public cost(_amt, msg.sender) checkBetAmt(_amt) returns(bool result){
+    function BetLow(uint256 _amt) public cost(_amt, msg.sender) checkBetAmt(_amt) returns(bool result,uint256 Num){
         Tkn Token = Tkn(contractAdr);
         
         uint256 ramdomNum = getRandom();
@@ -127,12 +147,15 @@ contract NFuacet is AccessControl{
         TotalSupply += _amt;
         
         assert(Token.balanceOf(address(this)) >= TotalSupply);
+        
+        emit BetLowHisEvt(msg.sender,_amt,ramdomNum);
+        
         if(ramdomNum < 4750){
             _balances[msg.sender] = (_amt * 2);
             TotalSupply += _amt;
-            return (true);
+            return (true,ramdomNum);
         }else{
-            return(false);
+            return(false,ramdomNum);
         }
     }
     
@@ -141,7 +164,7 @@ contract NFuacet is AccessControl{
         return (TotalSupply,Token.balanceOf(address(this)));
     }
     
-    function withdraw( ) public whenNotPaused cost(_balances[msg.sender],msg.sender) returns(uint){
+    function withdraw() public whenNotPaused checkfreezeAdr(msg.sender) CheckContractBal (msg.sender) returns(uint){
         Tkn Token = Tkn(contractAdr);
         
         uint amoutToWith = _balances[msg.sender];
@@ -157,7 +180,11 @@ contract NFuacet is AccessControl{
         return(amoutToWith);
     }
     
-    function emergencyWithdraw(address _Adr ) public whenPaused onlyOwner cost(_balances[msg.sender],msg.sender) returns(uint){
+    function emergencyWithdraw(address _Adr ) public 
+    whenPaused 
+    onlyOwner 
+    CheckContractBal (_Adr)
+    checkfreezeAdr(_Adr) returns(uint){
         Tkn Token = Tkn(contractAdr);
         
         uint amoutToWith = _balances[_Adr];
