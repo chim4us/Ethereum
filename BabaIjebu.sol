@@ -40,15 +40,25 @@ contract NumFuacet is AccessControl{
         uint256 choice4;
         uint256 choice5;
         uint256 BetAmt;
+        bool Paidout;
+        bool Won;
+    }
+    
+    struct WonBet{
+        uint256 num1;
+        uint256 num2;
+        uint256 num3;
+        uint256 num4;
+        uint256 num5;
     }
     
     uint256 totalBets = 0;
     
     mapping(uint => bet) private bets;
     
-    address payable contractAdr;
+    mapping(uint => WonBet) public wonbets;
     
-    Tkn Token = Tkn(contractAdr);
+    address payable contractAdr;
     
     enum State{Created, Betting, Ended}
     
@@ -68,6 +78,9 @@ contract NumFuacet is AccessControl{
         require(state == _state);
         _;
     }
+    
+    event betEvt(address account, uint betNum,uint date);
+    event wonPayOut(address account, uint256 betAmt,uint256 paidAmt,uint256 betTicket);
     
     constructor(
         uint256 _startFrm,
@@ -92,10 +105,11 @@ contract NumFuacet is AccessControl{
         require(_choice3 >= startFrm && _choice3 <= endTo,"");
         require(_choice4 >= startFrm && _choice4 <= endTo,"");
         require(_choice5 >= startFrm && _choice5 <= endTo,"");
+        Tkn Token = Tkn(contractAdr);
         require(Token.balanceOf(msg.sender) >= minimunBetAmt,"");
         require(Token.balanceOf(msg.sender) >= _Amt,"");
         
-        Token.transfer(address(this),_Amt);
+        Token.transferFrom(msg.sender,address(this),_Amt);
         bet memory b;
         b.beterAddress = msg.sender;
         b.choice1 = _choice1;
@@ -104,6 +118,8 @@ contract NumFuacet is AccessControl{
         b.choice4 = _choice4;
         b.choice5 = _choice5;
         b.BetAmt = _Amt;
+        b.Paidout = false;
+        b.Won = false;
         
         VotedNum[_choice1] += 1;
         VotedNum[_choice2] += 1;
@@ -112,6 +128,9 @@ contract NumFuacet is AccessControl{
         VotedNum[_choice5] += 1;
         
         bets[totalBets] = b;
+        
+        emit betEvt(msg.sender,totalBets,block.timestamp);
+        
         totalBets++;
     }
     
@@ -119,8 +138,9 @@ contract NumFuacet is AccessControl{
         _setupRole(DEFAULT_ADMIN_ROLE, _setAdmin);
     }
     
-    function pickWinsNum() public view instate(State.Ended)
-    returns (uint256 _num1, uint256 _num2,uint256 _num3,uint256 _num4,uint256 _num5){
+    function pickWinsNum() public instate(State.Ended)
+    //returns (uint256 _num1, uint256 _num2,uint256 _num3,uint256 _num4,uint256 _num5)
+    {
         uint256 lockyNum1 = 0;
         uint256 lockyNum2 = 0;
         uint256 lockyNum3 = 0;
@@ -168,8 +188,19 @@ contract NumFuacet is AccessControl{
                 vlockyNum5 = VotedNum[i];
             }
         }
+        state = State.Created;
         
-        return(lockyNum1,lockyNum2,lockyNum3,lockyNum4,lockyNum5);
+        WonBet memory b; 
+        b.num1 = lockyNum1;
+        b.num2 = lockyNum2;
+        b.num3 = lockyNum3;
+        b.num4 = lockyNum4;
+        b.num5 = lockyNum5;
+        
+        wonbets[block.timestamp] = b;
+        
+        //return(lockyNum1,lockyNum2,lockyNum3,lockyNum4,lockyNum5);
+        
     }
     
     function endBets()
@@ -188,12 +219,68 @@ contract NumFuacet is AccessControl{
         state = State.Betting;
     }
     
-    function pickWinner() instate(State.Ended) public{
+    function CheckBetsNumOnAddress(address _adr) public view returns(address [] memory){
         
     }
     
+    function ClaimBet(uint256 betnum,uint256 betdate)public {
+        require(bets[betnum].beterAddress == msg.sender,"Bet was not placed by your address");
+        Tkn Token = Tkn(contractAdr);
+        uint256 AdrWonBet = 0;
+        
+        if((bets[betnum].choice1 == wonbets[betdate].num1) || 
+        (bets[betnum].choice1 == wonbets[betdate].num2) ||
+        (bets[betnum].choice1 == wonbets[betdate].num3) ||
+        (bets[betnum].choice1 == wonbets[betdate].num4) ||
+        (bets[betnum].choice1 == wonbets[betdate].num5)){
+            AdrWonBet++;
+        }
+        
+        if((bets[betnum].choice2 == wonbets[betdate].num1) || 
+        (bets[betnum].choice2 == wonbets[betdate].num2) ||
+        (bets[betnum].choice2 == wonbets[betdate].num3) ||
+        (bets[betnum].choice2 == wonbets[betdate].num4) ||
+        (bets[betnum].choice2 == wonbets[betdate].num5)){
+            AdrWonBet++;
+        }
+        
+        if((bets[betnum].choice3 == wonbets[betdate].num1) || 
+        (bets[betnum].choice3 == wonbets[betdate].num2) ||
+        (bets[betnum].choice3 == wonbets[betdate].num3) ||
+        (bets[betnum].choice3 == wonbets[betdate].num4) ||
+        (bets[betnum].choice3 == wonbets[betdate].num5)){
+            AdrWonBet++;
+        }
+        
+        if((bets[betnum].choice4 == wonbets[betdate].num1) || 
+        (bets[betnum].choice4 == wonbets[betdate].num2) ||
+        (bets[betnum].choice4 == wonbets[betdate].num3) ||
+        (bets[betnum].choice4 == wonbets[betdate].num4) ||
+        (bets[betnum].choice4 == wonbets[betdate].num5)){
+            AdrWonBet++;
+        }
+        
+        if((bets[betnum].choice5 == wonbets[betdate].num1) || 
+        (bets[betnum].choice5 == wonbets[betdate].num2) ||
+        (bets[betnum].choice5 == wonbets[betdate].num3) ||
+        (bets[betnum].choice5 == wonbets[betdate].num4) ||
+        (bets[betnum].choice5 == wonbets[betdate].num5)){
+            AdrWonBet++;
+        }
+        
+        if(AdrWonBet >= 2){
+            bets[betnum].Won = true;
+        }
+        
+        if((bets[betnum].Won) && (!bets[betnum].Paidout)){
+            bets[betnum].Paidout = true;
+            Token.transfer(msg.sender,(bets[betnum].BetAmt * 10));
+            emit wonPayOut(msg.sender,bets[betnum].BetAmt,(bets[betnum].BetAmt * 10),betnum);
+        }
+    }
+    
     function setBetRange(uint256 _startFrm,
-        uint256 _endTo) public onlyOwner checkRange(_startFrm,_endTo){
+        uint256 _endTo) public onlyOwner checkRange(_startFrm,_endTo) instate(State.Created){
         startFrm = _startFrm;
         endTo = _endTo;
     }
